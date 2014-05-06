@@ -1,3 +1,4 @@
+// Implements a wrapper around net/smtp
 package libsmtp
 
 import (
@@ -25,6 +26,9 @@ type MailMessage struct {
 	subject              string
 	tls                  bool
 	to                   []string
+	contentType          string
+
+	buildCalled bool
 }
 
 var (
@@ -59,10 +63,12 @@ func New(server string, port int, from string, to []string, usetls bool) (*MailM
 	mailMessage.buf = bytes.NewBuffer(nil)
 	mailMessage.body = bytes.NewBuffer(nil)
 	mailMessage.tls = usetls
+	mailMessage.SetContentType("")
 
 	return mailMessage, nil
 }
 
+// Given a path to a file, we will base64 encode and generate a unique boundary ID for it
 func (m *MailMessage) AddAttachment(pathToFile string) error {
 	if len(pathToFile) > 0 {
 
@@ -70,7 +76,6 @@ func (m *MailMessage) AddAttachment(pathToFile string) error {
 		b, err := ioutil.ReadFile(pathToFile)
 
 		if err != nil {
-			// log.Fatalf("Problem reading the given attachment:\n\t%s", err)
 			return err
 		}
 
@@ -88,9 +93,27 @@ func (m *MailMessage) AddAttachment(pathToFile string) error {
 	return nil
 }
 
-func (m *MailMessage) Body(data string) {
+// Set the body to the given string
+func (m *MailMessage) SetBody(data string) {
 	if len(data) > 0 {
 		m.body.WriteString(data)
+	}
+}
+
+// An alternative to SetBody(string), this lets you set pre-existing
+// bytes as the body
+func (m *MailMessage) SetBodyBytes(data []byte) {
+	if len(data) > 0 {
+		m.body.Write(data)
+	}
+}
+
+// Defaults to text/plain
+func (m *MailMessage) SetContentType(data string) {
+	if len(data) > 0 {
+		m.contentType = data
+	} else {
+		m.contentType = "text/plain"
 	}
 }
 
@@ -105,8 +128,6 @@ func (m *MailMessage) build() error {
 		return errors.New("Message body is empty")
 	}
 
-	// m.buf.WriteString(fmt.Sprintf("From: %s\n", m.from))
-	// m.buf.WriteString(fmt.Sprintf("To: %s\n", strings.Join(m.to, ",")))
 	m.buf.WriteString(fmt.Sprintf("Subject: %s\n", m.subject))
 	m.buf.WriteString("MIME-version: 1.0;\n")
 
@@ -117,7 +138,7 @@ func (m *MailMessage) build() error {
 		}
 	}
 
-	m.buf.WriteString("Content-Type: text/plain; charset=\"UTF-8\";\n\n")
+	m.buf.WriteString(fmt.Sprintf("Content-Type: %s; charset=\"UTF-8\";\n\n", m.contentType))
 	m.buf.Write(m.body.Bytes())
 
 	if len(m.attachments) > 0 {
@@ -133,9 +154,26 @@ func (m *MailMessage) build() error {
 		}
 	}
 
+	m.buildCalled = true
+
 	return nil
 }
 
+// Returns the entire message as a byte array
+func (m *MailMessage) Bytes() ([]byte, error) {
+	if m.buildCalled {
+		return m.buf.Bytes(), nil
+	}
+
+	err := m.build()
+
+	return m.buf.Bytes(), err
+}
+
+// Attempts to send the mail message.
+//
+// By default, if TLS is desired and the handshake fails with the server,
+// this will continue to send the mail over an unencrypted channel
 func (m *MailMessage) Send() error {
 
 	if err := m.build(); err != nil {
@@ -147,7 +185,6 @@ func (m *MailMessage) Send() error {
 	c, err := smtp.Dial(smtpUri)
 
 	if err != nil {
-		// log.Fatalf("Error creating SMTP connection: %s", err)
 		return err
 	}
 
@@ -158,13 +195,8 @@ func (m *MailMessage) Send() error {
 				c.Reset()
 				c.Quit()
 
-				// log.Fatalf("Failed to establish TLS session: %s", err)
 				return err
 			}
-
-			// log.Println("TLS negotiated, sending over an encrypted channel")
-			// } else {
-			// 	log.Println("Server doesn't support TLS.. Sending over an unencrypted channel")
 		}
 	}
 
@@ -173,7 +205,6 @@ func (m *MailMessage) Send() error {
 		c.Reset()
 		c.Quit()
 
-		// log.Fatalf("Failed to set the From address: %s", err)
 		return err
 	}
 
@@ -183,7 +214,6 @@ func (m *MailMessage) Send() error {
 			c.Reset()
 			c.Quit()
 
-			// log.Fatalf("Failed to set a recipient: %s", err)
 			return err
 		}
 	}
@@ -194,7 +224,6 @@ func (m *MailMessage) Send() error {
 		c.Reset()
 		c.Quit()
 
-		// log.Fatalf("Failed to issue DATA command: %s", err)
 		return err
 	}
 
@@ -204,7 +233,6 @@ func (m *MailMessage) Send() error {
 		c.Reset()
 		c.Quit()
 
-		// log.Fatalf("Failed to write DATA: %s", err)
 		return err
 	}
 
@@ -212,12 +240,10 @@ func (m *MailMessage) Send() error {
 		c.Reset()
 		c.Quit()
 
-		// log.Fatalf("Failed to close the DATA stream: %s", err)
 		return err
 	}
 
 	c.Quit()
 
-	// log.Println("Message Sent")
 	return nil
 }
