@@ -11,6 +11,7 @@ import (
 	"io/ioutil"
 	"net/smtp"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -175,12 +176,17 @@ func (m *MailMessage) Bytes() ([]byte, error) {
 // By default, if TLS is desired and the handshake fails with the server,
 // this will continue to send the mail over an unencrypted channel
 func (m *MailMessage) Send() error {
+	var smtpUri string
 
 	if err := m.build(); err != nil {
 		return err
 	}
 
-	smtpUri := fmt.Sprintf("%s:%d", m.server, m.port)
+	if strings.Contains(m.server, ":") {
+		smtpUri = m.server
+	} else {
+		smtpUri = fmt.Sprintf("%s:%d", m.server, m.port)
+	}
 
 	c, err := smtp.Dial(smtpUri)
 
