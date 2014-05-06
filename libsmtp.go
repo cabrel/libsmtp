@@ -32,10 +32,6 @@ type MailMessage struct {
 	buildCalled bool
 }
 
-var (
-	mailMessage *MailMessage
-)
-
 func New(server string, port int, from string, to []string, usetls bool) (*MailMessage, error) {
 	if len(server) == 0 {
 		return &MailMessage{}, errors.New("SMTP server required")
@@ -53,23 +49,26 @@ func New(server string, port int, from string, to []string, usetls bool) (*MailM
 		port = 25
 	}
 
-	mailMessage = &MailMessage{port: port, server: server}
-
-	mailMessage.attachments = make(map[string][]byte, 0)
-	mailMessage.attachmentLengths = make(map[string]int, 0)
-	mailMessage.attachmentBoundaries = make(map[string]string, 0)
-	mailMessage.subject = fmt.Sprintf("libsmtp - %s", time.Now())
-	mailMessage.to = to
-	mailMessage.from = from
-	mailMessage.buf = bytes.NewBuffer(nil)
-	mailMessage.body = bytes.NewBuffer(nil)
-	mailMessage.tls = usetls
-	mailMessage.SetContentType("")
+	mailMessage := &MailMessage{
+		attachmentBoundaries: make(map[string]string, 0),
+		attachmentLengths:    make(map[string]int, 0),
+		attachments:          make(map[string][]byte, 0),
+		body:                 bytes.NewBuffer(nil),
+		buf:                  bytes.NewBuffer(nil),
+		contentType:          "text/plain",
+		from:                 from,
+		port:                 port,
+		server:               server,
+		subject:              fmt.Sprintf("libsmtp - %s", time.Now()),
+		tls:                  usetls,
+		to:                   to,
+	}
 
 	return mailMessage, nil
 }
 
-// Given a path to a file, we will base64 encode and generate a unique boundary ID for it
+// (optional) Given a path to a file, we will base64 encode and
+// generate a unique boundary ID for it
 func (m *MailMessage) AddAttachment(pathToFile string) error {
 	if len(pathToFile) > 0 {
 
@@ -109,7 +108,7 @@ func (m *MailMessage) SetBodyBytes(data []byte) {
 	}
 }
 
-// Defaults to text/plain
+// (optional) Defaults to text/plain
 func (m *MailMessage) SetContentType(data string) {
 	if len(data) > 0 {
 		m.contentType = data
@@ -118,20 +117,28 @@ func (m *MailMessage) SetContentType(data string) {
 	}
 }
 
+// (optional) Set the message subject
 func (m *MailMessage) Subject(subject string) {
 	if len(subject) > 0 {
 		m.subject = subject
 	}
 }
 
+// Creates the MIME mail message and writes it to the MailMessage buffer
 func (m *MailMessage) build() error {
 	if m.body.Len() == 0 {
 		return errors.New("Message body is empty")
 	}
 
-	m.buf.WriteString(fmt.Sprintf("Subject: %s\n", m.subject))
-	m.buf.WriteString("MIME-version: 1.0;\n")
+	// base64 encode the body
+	// write the body
+	body := m.body.Bytes()
+	encodedBodyLen := base64.StdEncoding.EncodedLen(len(body))
+	encodedBody := make([]byte, encodedBodyLen)
+	base64.StdEncoding.Encode(encodedBody, body)
 
+	m.buf.WriteString(fmt.Sprintf("To: %s\n", strings.Join(m.to, ",")))
+	m.buf.WriteString(fmt.Sprintf("Subject: %s\n", m.subject))
 	if len(m.attachments) > 0 {
 		for _, v := range m.attachmentBoundaries {
 			m.buf.WriteString(fmt.Sprintf("Content-Type: multipart/mixed; boundary=\"%s\"\n", v))
@@ -139,8 +146,10 @@ func (m *MailMessage) build() error {
 		}
 	}
 
-	m.buf.WriteString(fmt.Sprintf("Content-Type: %s; charset=\"UTF-8\";\n\n", m.contentType))
-	m.buf.Write(m.body.Bytes())
+	m.buf.WriteString("Content-Transfer-Encoding: base64\n")
+	m.buf.WriteString("MIME-Version: 1.0;\n")
+	m.buf.WriteString(fmt.Sprintf("Content-Type: %s; charset=\"utf-8\";\n\n", m.contentType))
+	m.buf.Write(encodedBody)
 
 	if len(m.attachments) > 0 {
 		for k, v := range m.attachmentBoundaries {
