@@ -7,12 +7,13 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/zerklabs/auburn"
 	"io/ioutil"
 	"net/smtp"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/zerklabs/auburn/utils"
 )
 
 type MailMessage struct {
@@ -85,7 +86,7 @@ func (m *MailMessage) AddAttachment(pathToFile string) error {
 
 		m.attachments[attachmentName] = encodedAttachment
 		m.attachmentLengths[attachmentName] = encodedLen
-		m.attachmentBoundaries[attachmentName] = auburn.RandomBase36()
+		m.attachmentBoundaries[attachmentName] = utils.RandomBase36()
 	} else {
 		return errors.New("No attachment specified")
 	}
