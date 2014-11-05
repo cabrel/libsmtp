@@ -1,0 +1,15 @@
+{
+	"ImportPath": "github.com/zerklabs/libsmtp",
+	"GoVersion": "go1.3.3",
+	"Deps": [
+		{
+			"ImportPath": "github.com/nu7hatch/gouuid",
+			"Rev": "179d4d0c4d8d407a32af483c2354df1d2c91e6c3"
+		},
+		{
+			"ImportPath": "github.com/zerklabs/auburn/utils",
+			"Comment": "v0.2.0",
+			"Rev": "917a70128532b0c43354bf45cbc11693cda91fea"
+		}
+	]
+}

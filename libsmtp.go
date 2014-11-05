@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zerklabs/auburn/utils"
+	"github.com/zerklabs/libsmtp/Godeps/_workspace/src/github.com/zerklabs/auburn/utils"
 )
 
 type MailMessage struct {
