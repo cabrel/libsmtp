@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/smtp"
@@ -13,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zerklabs/libsmtp/Godeps/_workspace/src/github.com/zerklabs/auburn/utils"
+	"github.com/zerklabs/auburn/utils"
 )
 
 type MailMessage struct {
@@ -34,23 +33,23 @@ type MailMessage struct {
 }
 
 func New(server string, port int, from string, to []string, usetls bool) (*MailMessage, error) {
-	if len(server) == 0 {
-		return &MailMessage{}, errors.New("SMTP server required")
-	}
+	var mailMessage *MailMessage
 
-	if len(from) == 0 {
-		return &MailMessage{}, errors.New("SMTP sender required")
+	if server == "" {
+		return mailMessage, fmt.Errorf("SMTP server required")
 	}
-
+	if from == "" {
+		return mailMessage, fmt.Errorf("SMTP sender required")
+	}
 	if len(to) == 0 {
-		return &MailMessage{}, errors.New("Mail recipient(s) required")
+		return mailMessage, fmt.Errorf("Mail recipient(s) required")
 	}
 
 	if port <= 0 {
 		port = 25
 	}
 
-	mailMessage := &MailMessage{
+	mailMessage = &MailMessage{
 		attachmentBoundaries: make(map[string]string, 0),
 		attachmentLengths:    make(map[string]int, 0),
 		attachments:          make(map[string][]byte, 0),
@@ -71,11 +70,9 @@ func New(server string, port int, from string, to []string, usetls bool) (*MailM
 // (optional) Given a path to a file, we will base64 encode and
 // generate a unique boundary ID for it
 func (m *MailMessage) AddAttachment(pathToFile string) error {
-	if len(pathToFile) > 0 {
-
+	if pathToFile != "" {
 		attachmentName := filepath.Base(pathToFile)
 		b, err := ioutil.ReadFile(pathToFile)
-
 		if err != nil {
 			return err
 		}
@@ -88,7 +85,7 @@ func (m *MailMessage) AddAttachment(pathToFile string) error {
 		m.attachmentLengths[attachmentName] = encodedLen
 		m.attachmentBoundaries[attachmentName] = utils.RandomBase36()
 	} else {
-		return errors.New("No attachment specified")
+		return fmt.Errorf("No attachment specified")
 	}
 
 	return nil
@@ -96,23 +93,19 @@ func (m *MailMessage) AddAttachment(pathToFile string) error {
 
 // Set the body to the given string
 func (m *MailMessage) SetBody(data string) {
-	if len(data) > 0 {
-		m.body.WriteString(data)
-	}
+	m.body.WriteString(data)
 }
 
 // An alternative to SetBody(string), this lets you set pre-existing
 // bytes as the body
 func (m *MailMessage) SetBodyBytes(data []byte) {
-	if len(data) > 0 {
-		m.body.Write(data)
-	}
+	m.body.Write(data)
 }
 
 // (optional) Defaults to text/plain
-func (m *MailMessage) SetContentType(data string) {
-	if len(data) > 0 {
-		m.contentType = data
+func (m *MailMessage) SetContentType(ct string) {
+	if len(ct) > 0 {
+		m.contentType = ct
 	} else {
 		m.contentType = "text/plain"
 	}
@@ -120,15 +113,13 @@ func (m *MailMessage) SetContentType(data string) {
 
 // (optional) Set the message subject
 func (m *MailMessage) Subject(subject string) {
-	if len(subject) > 0 {
-		m.subject = subject
-	}
+	m.subject = subject
 }
 
 // Creates the MIME mail message and writes it to the MailMessage buffer
 func (m *MailMessage) build() error {
 	if m.body.Len() == 0 {
-		return errors.New("Message body is empty")
+		return fmt.Errorf("Message body is empty")
 	}
 
 	// base64 encode the body
@@ -177,7 +168,6 @@ func (m *MailMessage) Bytes() ([]byte, error) {
 	}
 
 	err := m.build()
-
 	return m.buf.Bytes(), err
 }
 
@@ -199,7 +189,6 @@ func (m *MailMessage) Send() error {
 	}
 
 	c, err := smtp.Dial(smtpUri)
-
 	if err != nil {
 		return err
 	}
